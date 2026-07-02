@@ -7,7 +7,7 @@ import argparse
 import json
 import re
 from pathlib import Path
-from urllib.parse import quote, urlencode
+from urllib.parse import parse_qsl, quote, urlencode, urlsplit, urlunsplit
 
 
 BUILD_DIR = Path("_build/html")
@@ -18,6 +18,7 @@ REPO_DIR = "UKSA_SoftwareDataAI_Training"
 BRANCH = "main"
 ROOT_PATH = "/jupyterbook"
 THEBE_BOOTSTRAP_PATH = "/jupyterhub/services/uksa-thebe/bootstrap"
+THEBE_READY_PARAM = "uksa-thebe-ready"
 MARKER_START = "<!-- cpd-jupyterhub-launch-links:start -->"
 MARKER_END = "<!-- cpd-jupyterhub-launch-links:end -->"
 
@@ -48,8 +49,21 @@ def page_path(build_dir: Path, html_path: Path) -> str:
 
 
 def bootstrap_url(return_path: str) -> str:
-    query = urlencode({"return": return_path}, quote_via=quote)
+    return_target = with_query_params(return_path, {THEBE_READY_PARAM: "1"})
+    query = urlencode({"return": return_target}, quote_via=quote)
     return f"{THEBE_BOOTSTRAP_PATH}?{query}"
+
+
+def with_query_params(url: str, params: dict[str, str]) -> str:
+    parts = list(urlsplit(url))
+    query = [
+        (key, value)
+        for key, value in parse_qsl(parts[3], keep_blank_values=True)
+        if key not in params
+    ]
+    query.extend(params.items())
+    parts[3] = urlencode(query, doseq=True)
+    return urlunsplit(parts)
 
 
 def rewrite_static_connect_urls(html: str, return_path: str) -> str:
@@ -107,13 +121,22 @@ def injected_script(routes: dict[str, str]) -> str:
     default_url = json.dumps(launch_url())
     root_path = json.dumps(ROOT_PATH.rstrip("/"))
     thebe_bootstrap_path = json.dumps(THEBE_BOOTSTRAP_PATH)
+    thebe_ready_param = json.dumps(THEBE_READY_PARAM)
     return f"""{MARKER_START}
 <script id="cpd-jupyterhub-launch-links">
 (() => {{
   const rootPath = {root_path};
   const defaultUrl = {default_url};
   const thebeBootstrapPath = {thebe_bootstrap_path};
+  const thebeReadyParam = {thebe_ready_param};
   const notebookUrls = {routes_json};
+
+  function currentReturnPath(options = {{}}) {{
+    const url = new URL(window.location.href);
+    if (options.startThebe) url.searchParams.set("thebe", "1");
+    if (options.markReady !== false) url.searchParams.set(thebeReadyParam, "1");
+    return url.pathname + url.search + url.hash;
+  }}
 
   function currentSlug() {{
     let path = window.location.pathname.replace(/\\/$/, "");
@@ -126,10 +149,20 @@ def injected_script(routes: dict[str, str]) -> str:
     return notebookUrls[currentSlug()] || "";
   }}
 
-  function bootstrapUrl() {{
+  function bootstrapUrl(returnPath = currentReturnPath()) {{
     const url = new URL(thebeBootstrapPath, window.location.origin);
-    url.searchParams.set("return", window.location.pathname + window.location.search + window.location.hash);
+    url.searchParams.set("return", returnPath);
     return url.pathname + url.search;
+  }}
+
+  function shouldBootstrapBeforeThebe() {{
+    const params = new URLSearchParams(window.location.search);
+    return params.get("thebe") === "1" && params.get(thebeReadyParam) !== "1";
+  }}
+
+  if (shouldBootstrapBeforeThebe()) {{
+    window.location.replace(bootstrapUrl(currentReturnPath({{ startThebe: true }})));
+    return;
   }}
 
   function updateConnectLinks() {{
@@ -155,7 +188,30 @@ def injected_script(routes: dict[str, str]) -> str:
         : "Open the course in CPD JupyterHub";
     }}
     updateConnectLinks();
+    updateThebeLaunchButtons();
   }}
+
+  function updateThebeLaunchButtons() {{
+    for (const button of document.querySelectorAll("button")) {{
+      const label = [
+        button.getAttribute("aria-label"),
+        button.getAttribute("title"),
+        button.textContent,
+      ].join(" ").toLowerCase();
+      if (!label.includes("start compute environment") && !label.includes("launch kernel")) continue;
+      if (button.dataset.cpdJupyterhubBootstrap === "1") continue;
+      button.dataset.cpdJupyterhubBootstrap = "1";
+      button.addEventListener("click", (event) => {{
+        const params = new URLSearchParams(window.location.search);
+        if (params.get(thebeReadyParam) === "1") return;
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        window.location.href = bootstrapUrl(currentReturnPath({{ startThebe: true }}));
+      }}, true);
+    }}
+  }}
+
+  updateThebeLaunchButtons();
 
   let pending = false;
   let started = false;
