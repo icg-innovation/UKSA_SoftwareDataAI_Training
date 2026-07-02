@@ -245,13 +245,14 @@ a.cpd-jupyterhub-connect[data-cpd-jupyterhub-state="connected"] .cpd-jupyterhub-
       if (link.dataset.cpdJupyterhubClickGuard !== "1") {{
         link.dataset.cpdJupyterhubClickGuard = "1";
         link.addEventListener("click", (event) => {{
+          event.preventDefault();
+          event.stopImmediatePropagation();
           if (window.__cpdJupyterhubConnecting) {{
-            event.preventDefault();
-            event.stopImmediatePropagation();
             return;
           }}
           window.__cpdJupyterhubConnecting = true;
           link.setAttribute("aria-busy", "true");
+          window.location.assign(link.getAttribute("href") || bootstrapUrl());
         }}, true);
       }}
     }}
