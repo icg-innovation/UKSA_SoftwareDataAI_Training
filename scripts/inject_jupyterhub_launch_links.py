@@ -18,6 +18,7 @@ REPO_DIR = "UKSA_SoftwareDataAI_Training"
 BRANCH = "main"
 ROOT_PATH = "/jupyterbook"
 THEBE_BOOTSTRAP_PATH = "/jupyterhub/services/uksa-thebe/bootstrap"
+THEBE_STATUS_PATH = "/jupyterhub/services/uksa-thebe/status"
 THEBE_READY_PARAM = "uksa-thebe-ready"
 MARKER_START = "<!-- cpd-jupyterhub-launch-links:start -->"
 MARKER_END = "<!-- cpd-jupyterhub-launch-links:end -->"
@@ -128,6 +129,7 @@ def injected_script(routes: dict[str, str]) -> str:
     default_url = json.dumps(launch_url())
     root_path = json.dumps(ROOT_PATH.rstrip("/"))
     thebe_bootstrap_path = json.dumps(THEBE_BOOTSTRAP_PATH)
+    thebe_status_path = json.dumps(THEBE_STATUS_PATH)
     thebe_ready_param = json.dumps(THEBE_READY_PARAM)
     return f"""{MARKER_START}
 <script id="cpd-jupyterhub-launch-links">
@@ -135,8 +137,10 @@ def injected_script(routes: dict[str, str]) -> str:
   const rootPath = {root_path};
   const defaultUrl = {default_url};
   const thebeBootstrapPath = {thebe_bootstrap_path};
+  const thebeStatusPath = {thebe_status_path};
   const thebeReadyParam = {thebe_ready_param};
   const notebookUrls = {routes_json};
+  let hubConnected = false;
 
   function currentReturnPath(options = {{}}) {{
     const url = new URL(window.location.href);
@@ -178,12 +182,34 @@ def injected_script(routes: dict[str, str]) -> str:
   function updateConnectLinks() {{
     const href = bootstrapUrl();
     for (const link of document.querySelectorAll("a")) {{
-      if (link.textContent.trim() !== "Connect JupyterHub") continue;
-      if (!link.href.includes("/services/uksa-thebe/bootstrap")) continue;
+      const isConnectLink = link.dataset.cpdJupyterhubConnect === "1"
+        || link.href.includes("/services/uksa-thebe/bootstrap")
+        || link.textContent.trim() === "Connect JupyterHub"
+        || link.textContent.trim() === "JupyterHub Connected";
+      if (!isConnectLink) continue;
+      link.dataset.cpdJupyterhubConnect = "1";
       if (link.getAttribute("href") !== href) link.setAttribute("href", href);
       link.removeAttribute("target");
       link.removeAttribute("rel");
-      link.title = "Authenticate with CPD JupyterHub for in-page code execution";
+      link.textContent = hubConnected ? "JupyterHub Connected" : "Connect JupyterHub";
+      link.title = hubConnected
+        ? "Connected to CPD JupyterHub"
+        : "Authenticate with CPD JupyterHub for in-page code execution";
+    }}
+  }}
+
+  async function updateConnectionStatus() {{
+    try {{
+      const response = await fetch(thebeStatusPath, {{
+        credentials: "include",
+        headers: {{ accept: "application/json" }},
+      }});
+      if (!response.ok) return;
+      const status = await response.json();
+      hubConnected = status.connected === true;
+      updateConnectLinks();
+    }} catch (_error) {{
+      // Leave the connect action in its default state when status is unavailable.
     }}
   }}
 
@@ -259,6 +285,7 @@ def injected_script(routes: dict[str, str]) -> str:
       subtree: true,
     }});
     updateLaunchLinks();
+    updateConnectionStatus();
   }}
 
   function startAfterHydration() {{
