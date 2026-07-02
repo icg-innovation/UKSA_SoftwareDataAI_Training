@@ -66,8 +66,25 @@ def with_query_params(url: str, params: dict[str, str]) -> str:
     return urlunsplit(parts)
 
 
-def rewrite_static_connect_urls(html: str, return_path: str) -> str:
-    target = bootstrap_url(return_path)
+def root_page_path() -> str:
+    return f"{ROOT_PATH.rstrip('/')}/"
+
+
+def first_notebook_page_path(routes: dict[str, str]) -> str:
+    slug = next(iter(routes), "")
+    return f"{ROOT_PATH.rstrip('/')}/{slug}/" if slug else root_page_path()
+
+
+def runnable_return_path(return_path: str, default_notebook_path: str) -> str:
+    return default_notebook_path if return_path == root_page_path() else return_path
+
+
+def rewrite_static_connect_urls(
+    html: str,
+    return_path: str,
+    default_notebook_path: str,
+) -> str:
+    target = bootstrap_url(runnable_return_path(return_path, default_notebook_path))
     return re.sub(
         rf"{re.escape(THEBE_BOOTSTRAP_PATH)}(?:\?return=[^\"'<\s]*)?",
         target,
@@ -120,6 +137,7 @@ def injected_script(routes: dict[str, str]) -> str:
     routes_json = json.dumps(routes, sort_keys=True, separators=(",", ":"))
     default_url = json.dumps(launch_url())
     root_path = json.dumps(ROOT_PATH.rstrip("/"))
+    first_notebook_path = json.dumps(first_notebook_page_path(routes))
     thebe_bootstrap_path = json.dumps(THEBE_BOOTSTRAP_PATH)
     thebe_ready_param = json.dumps(THEBE_READY_PARAM)
     return f"""{MARKER_START}
@@ -127,12 +145,16 @@ def injected_script(routes: dict[str, str]) -> str:
 (() => {{
   const rootPath = {root_path};
   const defaultUrl = {default_url};
+  const firstNotebookPath = {first_notebook_path};
   const thebeBootstrapPath = {thebe_bootstrap_path};
   const thebeReadyParam = {thebe_ready_param};
   const notebookUrls = {routes_json};
 
   function currentReturnPath(options = {{}}) {{
-    const url = new URL(window.location.href);
+    let url = new URL(window.location.href);
+    if (currentSlug() === "" && firstNotebookPath) {{
+      url = new URL(firstNotebookPath, window.location.origin);
+    }}
     if (options.startThebe) url.searchParams.set("thebe", "1");
     if (options.markReady !== false) url.searchParams.set(thebeReadyParam, "1");
     return url.pathname + url.search + url.hash;
@@ -263,7 +285,12 @@ def injected_script(routes: dict[str, str]) -> str:
 {MARKER_END}"""
 
 
-def inject(build_dir: Path, html_path: Path, script: str) -> bool:
+def inject(
+    build_dir: Path,
+    html_path: Path,
+    script: str,
+    default_notebook_path: str,
+) -> bool:
     original = html_path.read_text(encoding="utf-8")
     html = re.sub(
         rf"{re.escape(MARKER_START)}.*?{re.escape(MARKER_END)}\n?",
@@ -271,7 +298,11 @@ def inject(build_dir: Path, html_path: Path, script: str) -> bool:
         original,
         flags=re.DOTALL,
     )
-    html = rewrite_static_connect_urls(html, page_path(build_dir, html_path))
+    html = rewrite_static_connect_urls(
+        html,
+        page_path(build_dir, html_path),
+        default_notebook_path,
+    )
     if "</body>" not in html:
         raise ValueError(f"{html_path} does not contain </body>")
     updated = html.replace("</body>", f"{script}\n</body>", 1)
@@ -290,10 +321,11 @@ def main() -> int:
     project = extract_project(entrypoint.read_text(encoding="utf-8"))
     routes = notebook_routes(project)
     script = injected_script(routes)
+    default_notebook_path = first_notebook_page_path(routes)
 
     changed = 0
     for html_path in args.build_dir.rglob("*.html"):
-        changed += int(inject(args.build_dir, html_path, script))
+        changed += int(inject(args.build_dir, html_path, script, default_notebook_path))
     print(f"Injected {len(routes)} CPD notebook launch routes into {changed} HTML file(s).")
     return 0
 
