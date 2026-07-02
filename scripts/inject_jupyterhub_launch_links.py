@@ -132,6 +132,38 @@ def injected_script(routes: dict[str, str]) -> str:
     thebe_status_path = json.dumps(THEBE_STATUS_PATH)
     thebe_ready_param = json.dumps(THEBE_READY_PARAM)
     return f"""{MARKER_START}
+<style id="cpd-jupyterhub-launch-link-styles">
+a.cpd-jupyterhub-connect {{
+  align-items: center;
+  display: inline-flex;
+  gap: 0.45rem;
+  white-space: nowrap;
+}}
+a.cpd-jupyterhub-connect .cpd-jupyterhub-status {{
+  background: #6b7280;
+  border-radius: 9999px;
+  box-shadow: 0 0 0 2px rgba(107, 114, 128, 0.22);
+  flex: 0 0 auto;
+  height: 0.62rem;
+  position: relative;
+  width: 0.62rem;
+}}
+a.cpd-jupyterhub-connect[data-cpd-jupyterhub-state="connected"] .cpd-jupyterhub-status {{
+  background: #15803d;
+  box-shadow: 0 0 0 2px rgba(21, 128, 61, 0.22);
+}}
+a.cpd-jupyterhub-connect[data-cpd-jupyterhub-state="connected"] .cpd-jupyterhub-status::after {{
+  border: solid white;
+  border-width: 0 0.09rem 0.09rem 0;
+  content: "";
+  height: 0.34rem;
+  left: 0.21rem;
+  position: absolute;
+  top: 0.08rem;
+  transform: rotate(45deg);
+  width: 0.18rem;
+}}
+</style>
 <script id="cpd-jupyterhub-launch-links">
 (() => {{
   const rootPath = {root_path};
@@ -185,16 +217,43 @@ def injected_script(routes: dict[str, str]) -> str:
       const isConnectLink = link.dataset.cpdJupyterhubConnect === "1"
         || link.href.includes("/services/uksa-thebe/bootstrap")
         || link.textContent.trim() === "Connect JupyterHub"
-        || link.textContent.trim() === "JupyterHub Connected";
+        || link.textContent.trim() === "JupyterHub";
       if (!isConnectLink) continue;
       link.dataset.cpdJupyterhubConnect = "1";
       if (link.getAttribute("href") !== href) link.setAttribute("href", href);
       link.removeAttribute("target");
       link.removeAttribute("rel");
-      link.textContent = hubConnected ? "JupyterHub Connected" : "Connect JupyterHub";
+      link.classList.add("cpd-jupyterhub-connect");
+      const state = hubConnected ? "connected" : "disconnected";
+      if (link.dataset.cpdJupyterhubState !== state || !link.querySelector(".cpd-jupyterhub-status")) {{
+        link.dataset.cpdJupyterhubState = state;
+        const marker = document.createElement("span");
+        marker.className = "cpd-jupyterhub-status";
+        marker.setAttribute("aria-hidden", "true");
+        const label = document.createElement("span");
+        label.className = "cpd-jupyterhub-label";
+        label.textContent = "JupyterHub";
+        link.replaceChildren(marker, label);
+      }}
+      link.setAttribute(
+        "aria-label",
+        hubConnected ? "Connected to CPD JupyterHub" : "Connect to CPD JupyterHub"
+      );
       link.title = hubConnected
         ? "Connected to CPD JupyterHub"
         : "Authenticate with CPD JupyterHub for in-page code execution";
+      if (link.dataset.cpdJupyterhubClickGuard !== "1") {{
+        link.dataset.cpdJupyterhubClickGuard = "1";
+        link.addEventListener("click", (event) => {{
+          if (window.__cpdJupyterhubConnecting) {{
+            event.preventDefault();
+            event.stopImmediatePropagation();
+            return;
+          }}
+          window.__cpdJupyterhubConnecting = true;
+          link.setAttribute("aria-busy", "true");
+        }}, true);
+      }}
     }}
   }}
 
