@@ -377,10 +377,16 @@ html.dark .cpd-jupyterhub-menu a:focus {{
 
   function updateConnectMenu(menu) {{
     const disconnectHref = disconnectUrl();
+    const launchHref = currentNotebookUrl() || defaultUrl;
+    const launchText = currentNotebookUrl()
+      ? "Open this notebook in JupyterHub"
+      : "Open course in JupyterHub";
     if (
       menu.dataset.cpdJupyterhubMenuReady === "1"
       && menu.dataset.cpdJupyterhubUser === hubUser
       && menu.dataset.cpdJupyterhubDisconnectHref === disconnectHref
+      && menu.dataset.cpdJupyterhubLaunchHref === launchHref
+      && menu.dataset.cpdJupyterhubLaunchText === launchText
     ) {{
       return;
     }}
@@ -392,6 +398,12 @@ html.dark .cpd-jupyterhub-menu a:focus {{
       user.textContent = "Signed in as " + hubUser;
       items.push(user);
     }}
+
+    const openNotebook = document.createElement("a");
+    openNotebook.href = launchHref;
+    openNotebook.textContent = launchText;
+    openNotebook.setAttribute("role", "menuitem");
+    items.push(openNotebook);
 
     const openHub = document.createElement("a");
     openHub.href = hubHomePath;
@@ -408,6 +420,8 @@ html.dark .cpd-jupyterhub-menu a:focus {{
     menu.dataset.cpdJupyterhubMenuReady = "1";
     menu.dataset.cpdJupyterhubUser = hubUser;
     menu.dataset.cpdJupyterhubDisconnectHref = disconnectHref;
+    menu.dataset.cpdJupyterhubLaunchHref = launchHref;
+    menu.dataset.cpdJupyterhubLaunchText = launchText;
     menu.replaceChildren(...items);
   }}
 

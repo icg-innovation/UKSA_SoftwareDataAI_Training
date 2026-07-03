@@ -110,8 +110,6 @@ project:
 site:
   template: book-theme
   actions:
-    - title: Open in JupyterHub
-      url: https://icg-cpd-cluster.port.ac.uk/jupyterhub/hub/user-redirect/git-pull?repo=https%3A%2F%2Fgithub.com%2Fxangma%2FUKSA_SoftwareDataAI_Training&branch=main&urlpath=lab%2Ftree%2FUKSA_SoftwareDataAI_Training%3Fautodecode
     - title: JupyterHub
       url: /jupyterhub/services/uksa-thebe/bootstrap
   options:
