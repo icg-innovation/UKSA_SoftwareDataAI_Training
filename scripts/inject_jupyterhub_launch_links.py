@@ -260,8 +260,7 @@ html.dark .cpd-jupyterhub-menu a:focus {{
   right: 1rem;
   z-index: 80;
 }}
-.cpd-thebe-launch-toast::before,
-button.cpd-thebe-launching::after {{
+.cpd-thebe-launch-toast::before {{
   animation: cpd-thebe-spin 0.8s linear infinite;
   border: 0.14rem solid rgba(87, 83, 78, 0.24);
   border-top-color: #2563eb;
@@ -274,11 +273,6 @@ button.cpd-thebe-launching::after {{
 button.cpd-thebe-launching {{
   cursor: wait;
   opacity: 0.78;
-}}
-button.cpd-thebe-launching::after {{
-  display: inline-block;
-  margin-left: 0.4rem;
-  vertical-align: -0.12rem;
 }}
 html.dark .cpd-thebe-launch-toast {{
   background: #1c1917;
@@ -301,11 +295,13 @@ html.dark .cpd-thebe-launch-toast {{
   const thebeDisconnectPath = {thebe_disconnect_path};
   const hubHomePath = {hub_home_path};
   const thebeReadyParam = {thebe_ready_param};
+  const thebeLaunchPendingKey = "cpd-thebe-launch-pending";
   const notebookUrls = {routes_json};
   let hubConnected = false;
   let hubConnecting = false;
   let hubUser = "";
   let connectMenuCounter = 0;
+  let consumedThebeLaunchIntent = false;
 
   function currentReturnPath(options = {{}}) {{
     const url = new URL(window.location.href);
@@ -347,6 +343,45 @@ html.dark .cpd-thebe-launch-toast {{
   function shouldBootstrapBeforeThebe() {{
     const params = new URLSearchParams(window.location.search);
     return params.get("thebe") === "1" && params.get(thebeReadyParam) !== "1";
+  }}
+
+  function rememberThebeLaunchIntent(returnPath) {{
+    try {{
+      sessionStorage.setItem(thebeLaunchPendingKey, returnPath);
+    }} catch (_error) {{
+      // Some browsers block sessionStorage; the URL parameters still carry intent.
+    }}
+  }}
+
+  function consumeThebeLaunchIntent() {{
+    if (consumedThebeLaunchIntent) return false;
+    const params = new URLSearchParams(window.location.search);
+    const urlRequestsLaunch =
+      params.get("thebe") === "1" && params.get(thebeReadyParam) === "1";
+    let storedReturnPath = "";
+    let storageAvailable = true;
+    try {{
+      storedReturnPath = sessionStorage.getItem(thebeLaunchPendingKey) || "";
+    }} catch (_error) {{
+      storageAvailable = false;
+      // Ignore storage errors and fall back to the URL parameters.
+    }}
+
+    if (storedReturnPath && storedReturnPath !== currentReturnPath()) {{
+      return false;
+    }}
+
+    if (!storedReturnPath && (!urlRequestsLaunch || storageAvailable)) {{
+      return false;
+    }}
+
+    consumedThebeLaunchIntent = true;
+    try {{
+      sessionStorage.removeItem(thebeLaunchPendingKey);
+    }} catch (_error) {{
+      // Ignore storage cleanup errors.
+    }}
+    return true;
   }}
 
   if (shouldBootstrapBeforeThebe()) {{
@@ -604,10 +639,16 @@ html.dark .cpd-thebe-launch-toast {{
     updateThebeLaunchButtons();
   }}
 
-  function showThebeLaunchProgress(button) {{
+  function showThebeLaunchProgress(
+    button,
+    message = "Starting JupyterHub for in-page execution...",
+    options = {{}}
+  ) {{
     button.classList.add("cpd-thebe-launching");
     button.setAttribute("aria-busy", "true");
-    button.setAttribute("disabled", "disabled");
+    if (options.disable) {{
+      button.setAttribute("disabled", "disabled");
+    }}
 
     let toast = document.getElementById("cpd-thebe-launch-toast");
     if (!toast) {{
@@ -618,7 +659,7 @@ html.dark .cpd-thebe-launch-toast {{
       toast.setAttribute("role", "status");
       document.body.appendChild(toast);
     }}
-    toast.textContent = "Starting JupyterHub for in-page execution...";
+    toast.textContent = message;
   }}
 
   function updateThebeLaunchButtons() {{
@@ -633,15 +674,33 @@ html.dark .cpd-thebe-launch-toast {{
       button.dataset.cpdJupyterhubBootstrap = "1";
       button.addEventListener("click", (event) => {{
         const params = new URLSearchParams(window.location.search);
-        if (params.get(thebeReadyParam) === "1") return;
+        if (params.get(thebeReadyParam) === "1") {{
+          showThebeLaunchProgress(button, "Starting notebook kernel...");
+          return;
+        }}
         event.preventDefault();
         event.stopImmediatePropagation();
-        showThebeLaunchProgress(button);
+        const returnPath = currentReturnPath({{ startThebe: true }});
+        rememberThebeLaunchIntent(returnPath);
+        showThebeLaunchProgress(
+          button,
+          "Starting JupyterHub for in-page execution...",
+          {{ disable: true }}
+        );
         window.location.href = bootstrapUrl(
-          currentReturnPath({{ startThebe: true }}),
+          returnPath,
           {{ startThebe: true }}
         );
       }}, true);
+
+      if (button.dataset.cpdThebeAutoLaunch !== "1" && consumeThebeLaunchIntent()) {{
+        button.dataset.cpdThebeAutoLaunch = "1";
+        showThebeLaunchProgress(button, "Starting notebook kernel...");
+        window.setTimeout(() => {{
+          if (!document.contains(button)) return;
+          button.click();
+        }}, 150);
+      }}
     }}
   }}
 
