@@ -242,6 +242,55 @@ html.dark .cpd-jupyterhub-menu a:hover,
 html.dark .cpd-jupyterhub-menu a:focus {{
   background: #44403c;
 }}
+.cpd-thebe-launch-toast {{
+  align-items: center;
+  background: #ffffff;
+  border: 1px solid rgba(120, 113, 108, 0.28);
+  border-radius: 0.35rem;
+  bottom: 1rem;
+  box-shadow: 0 0.75rem 1.5rem rgba(28, 25, 23, 0.16);
+  color: #292524;
+  display: inline-flex;
+  font-size: 0.92rem;
+  gap: 0.65rem;
+  line-height: 1.35;
+  max-width: min(24rem, calc(100vw - 2rem));
+  padding: 0.65rem 0.75rem;
+  position: fixed;
+  right: 1rem;
+  z-index: 80;
+}}
+.cpd-thebe-launch-toast::before,
+button.cpd-thebe-launching::after {{
+  animation: cpd-thebe-spin 0.8s linear infinite;
+  border: 0.14rem solid rgba(87, 83, 78, 0.24);
+  border-top-color: #2563eb;
+  border-radius: 9999px;
+  content: "";
+  flex: 0 0 auto;
+  height: 0.9rem;
+  width: 0.9rem;
+}}
+button.cpd-thebe-launching {{
+  cursor: wait;
+  opacity: 0.78;
+}}
+button.cpd-thebe-launching::after {{
+  display: inline-block;
+  margin-left: 0.4rem;
+  vertical-align: -0.12rem;
+}}
+html.dark .cpd-thebe-launch-toast {{
+  background: #1c1917;
+  border-color: rgba(255, 255, 255, 0.2);
+  box-shadow: 0 0.75rem 1.5rem rgba(0, 0, 0, 0.4);
+  color: #fafaf9;
+}}
+@keyframes cpd-thebe-spin {{
+  to {{
+    transform: rotate(360deg);
+  }}
+}}
 </style>
 <script id="cpd-jupyterhub-launch-links">
 (() => {{
@@ -555,6 +604,23 @@ html.dark .cpd-jupyterhub-menu a:focus {{
     updateThebeLaunchButtons();
   }}
 
+  function showThebeLaunchProgress(button) {{
+    button.classList.add("cpd-thebe-launching");
+    button.setAttribute("aria-busy", "true");
+    button.setAttribute("disabled", "disabled");
+
+    let toast = document.getElementById("cpd-thebe-launch-toast");
+    if (!toast) {{
+      toast = document.createElement("div");
+      toast.id = "cpd-thebe-launch-toast";
+      toast.className = "cpd-thebe-launch-toast";
+      toast.setAttribute("aria-live", "polite");
+      toast.setAttribute("role", "status");
+      document.body.appendChild(toast);
+    }}
+    toast.textContent = "Starting JupyterHub for in-page execution...";
+  }}
+
   function updateThebeLaunchButtons() {{
     for (const button of document.querySelectorAll("button")) {{
       const label = [
@@ -570,6 +636,7 @@ html.dark .cpd-jupyterhub-menu a:focus {{
         if (params.get(thebeReadyParam) === "1") return;
         event.preventDefault();
         event.stopImmediatePropagation();
+        showThebeLaunchProgress(button);
         window.location.href = bootstrapUrl(
           currentReturnPath({{ startThebe: true }}),
           {{ startThebe: true }}
