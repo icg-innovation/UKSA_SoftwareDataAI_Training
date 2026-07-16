@@ -2,7 +2,7 @@
   "name": "uksa-software-data-ai-training",
   "private": true,
   "scripts": {
-    "check:docs": "python scripts/check_tracked_noise.py && python scripts/check_missing_assets.py && python scripts/check_notebook_kernels.py && python scripts/check_notebook_metadata.py && python scripts/check_notebook_paths.py",
+    "check:docs": "python scripts/check_tracked_noise.py && python scripts/check_missing_assets.py && python scripts/check_notebook_kernels.py && python scripts/check_notebook_metadata.py && python scripts/check_notebook_outputs.py && python scripts/check_notebook_paths.py",
     "build:docs": "myst build --html && python3 scripts/inject_jupyterhub_launch_links.py"
   },
   "devDependencies": {

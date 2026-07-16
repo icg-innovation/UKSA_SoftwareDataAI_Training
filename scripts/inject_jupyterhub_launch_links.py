@@ -296,12 +296,15 @@ html.dark .cpd-thebe-launch-toast {{
   const hubHomePath = {hub_home_path};
   const thebeReadyParam = {thebe_ready_param};
   const thebeLaunchPendingKey = "cpd-thebe-launch-pending";
+  const statusRefreshIntervalMs = 30000;
   const notebookUrls = {routes_json};
   let hubConnected = false;
   let hubConnecting = false;
+  let hubServerState = "unknown";
   let hubUser = "";
   let connectMenuCounter = 0;
   let consumedThebeLaunchIntent = false;
+  let allowNextThebeLaunch = false;
 
   function currentReturnPath(options = {{}}) {{
     const url = new URL(window.location.href);
@@ -325,6 +328,14 @@ html.dark .cpd-thebe-launch-toast {{
 
   function currentNotebookUrl() {{
     return notebookUrls[currentSlug()] || "";
+  }}
+
+  function clearThebeLaunchParams() {{
+    const url = new URL(window.location.href);
+    if (!url.searchParams.has("thebe") && !url.searchParams.has(thebeReadyParam)) return;
+    url.searchParams.delete("thebe");
+    url.searchParams.delete(thebeReadyParam);
+    history.replaceState(history.state, "", url.pathname + url.search + url.hash);
   }}
 
   function bootstrapUrl(returnPath = currentReturnPath(), options = {{}}) {{
@@ -397,7 +408,17 @@ html.dark .cpd-thebe-launch-toast {{
   }}
 
   function connectLabel(state) {{
-    if (state === "connected") return "Connected to JupyterHub";
+    if (state === "connected") {{
+      const serverLabels = {{
+        pending: "Server changing",
+        ready: "Server running",
+        starting: "Server starting",
+        stopped: "Server stopped",
+        stopping: "Server stopping",
+        unknown: "Server status unavailable",
+      }};
+      return "Connected to JupyterHub · " + (serverLabels[hubServerState] || serverLabels.unknown);
+    }}
     if (state === "connecting") return "Connecting to JupyterHub";
     return "Connect to JupyterHub";
   }}
@@ -548,11 +569,11 @@ html.dark .cpd-thebe-launch-toast {{
       link.setAttribute(
         "aria-label",
         state === "connected"
-          ? "Connected to CPD JupyterHub. Open options."
+          ? labelText + ". Open options."
           : labelText
       );
       link.title = state === "connected"
-        ? "Open CPD JupyterHub options"
+        ? labelText + ". Open CPD JupyterHub options."
         : "Authenticate with CPD JupyterHub for in-page code execution";
       if (state === "connecting") {{
         link.setAttribute("aria-busy", "true");
@@ -612,16 +633,22 @@ html.dark .cpd-thebe-launch-toast {{
         credentials: "include",
         headers: {{ accept: "application/json" }},
       }});
-      if (!response.ok) return;
+      if (!response.ok) return false;
       const status = await response.json();
       hubConnected = status.connected === true;
       hubConnecting = false;
+      const serverState = status.server && typeof status.server.state === "string"
+        ? status.server.state
+        : "unknown";
+      hubServerState = hubConnected ? serverState : "unknown";
       hubUser = typeof status.user === "string"
         ? status.user
         : (status.user && typeof status.user.name === "string" ? status.user.name : "");
       updateConnectLinks();
+      return true;
     }} catch (_error) {{
       // Leave the connect action in its default state when status is unavailable.
+      return false;
     }}
   }}
 
@@ -641,7 +668,7 @@ html.dark .cpd-thebe-launch-toast {{
 
   function showThebeLaunchProgress(
     button,
-    message = "Starting JupyterHub for in-page execution...",
+    message = "Starting your Jupyter server...",
     options = {{}}
   ) {{
     button.classList.add("cpd-thebe-launching");
@@ -662,7 +689,28 @@ html.dark .cpd-thebe-launch-toast {{
     toast.textContent = message;
   }}
 
+  async function startThebeOrBootstrap(button) {{
+    button.dataset.cpdJupyterhubChecking = "1";
+    button.setAttribute("aria-busy", "true");
+    const statusAvailable = await updateConnectionStatus();
+    if (!document.contains(button)) return;
+
+    if (statusAvailable && hubServerState === "ready") {{
+      delete button.dataset.cpdJupyterhubChecking;
+      button.removeAttribute("aria-busy");
+      allowNextThebeLaunch = true;
+      button.click();
+      return;
+    }}
+
+    const returnPath = currentReturnPath({{ startThebe: true }});
+    rememberThebeLaunchIntent(returnPath);
+    showThebeLaunchProgress(button, "Starting your Jupyter server...", {{ disable: true }});
+    window.location.href = bootstrapUrl(returnPath, {{ startThebe: true }});
+  }}
+
   function updateThebeLaunchButtons() {{
+    let foundLaunchButton = false;
     for (const button of document.querySelectorAll("button")) {{
       const label = [
         button.getAttribute("aria-label"),
@@ -670,38 +718,31 @@ html.dark .cpd-thebe-launch-toast {{
         button.textContent,
       ].join(" ").toLowerCase();
       if (!label.includes("start compute environment") && !label.includes("launch kernel")) continue;
+      foundLaunchButton = true;
       if (button.dataset.cpdJupyterhubBootstrap === "1") continue;
       button.dataset.cpdJupyterhubBootstrap = "1";
       button.addEventListener("click", (event) => {{
-        const params = new URLSearchParams(window.location.search);
-        if (params.get(thebeReadyParam) === "1") {{
-          showThebeLaunchProgress(button, "Starting notebook kernel...");
+        if (allowNextThebeLaunch) {{
+          allowNextThebeLaunch = false;
           return;
         }}
         event.preventDefault();
         event.stopImmediatePropagation();
-        const returnPath = currentReturnPath({{ startThebe: true }});
-        rememberThebeLaunchIntent(returnPath);
-        showThebeLaunchProgress(
-          button,
-          "Starting JupyterHub for in-page execution...",
-          {{ disable: true }}
-        );
-        window.location.href = bootstrapUrl(
-          returnPath,
-          {{ startThebe: true }}
-        );
+        if (button.dataset.cpdJupyterhubChecking === "1") return;
+        startThebeOrBootstrap(button);
       }}, true);
 
       if (button.dataset.cpdThebeAutoLaunch !== "1" && consumeThebeLaunchIntent()) {{
         button.dataset.cpdThebeAutoLaunch = "1";
-        showThebeLaunchProgress(button, "Starting notebook kernel...");
+        allowNextThebeLaunch = true;
+        clearThebeLaunchParams();
         window.setTimeout(() => {{
           if (!document.contains(button)) return;
           button.click();
         }}, 150);
       }}
     }}
+    if (foundLaunchButton) clearThebeLaunchParams();
   }}
 
   updateThebeLaunchButtons();
@@ -740,6 +781,10 @@ html.dark .cpd-thebe-launch-toast {{
     }});
     updateLaunchLinks();
     updateConnectionStatus();
+    window.setInterval(updateConnectionStatus, statusRefreshIntervalMs);
+    document.addEventListener("visibilitychange", () => {{
+      if (document.visibilityState === "visible") updateConnectionStatus();
+    }});
   }}
 
   function startAfterHydration() {{
