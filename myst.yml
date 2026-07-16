@@ -115,3 +115,4 @@ site:
   options:
     logo: docs/source/Logos_Banner.png
     favicon: favicon.svg
+    style: myst-theme.css

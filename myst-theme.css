@@ -1,0 +1,9 @@
+/* The partner banner contains five detailed logos, so the theme's default
+   2.25rem logo height makes their names unreadable. Keep it prominent on
+   larger screens while leaving room for navigation controls on mobile. */
+.myst-home-link-logo img {
+  height: clamp(2.25rem, 5vw, 4rem);
+  max-width: min(46vw, 18rem);
+  object-fit: contain;
+  width: auto;
+}
