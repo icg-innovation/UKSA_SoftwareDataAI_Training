@@ -717,6 +717,22 @@ html.dark .cpd-thebe-launch-toast {{
         button.getAttribute("title"),
         button.textContent,
       ].join(" ").toLowerCase();
+
+      if (label.includes("launch notebook in jupyter")) {{
+        if (button.dataset.cpdJupyterhubNotebookLaunch === "1") continue;
+        button.dataset.cpdJupyterhubNotebookLaunch = "1";
+        button.addEventListener("click", (event) => {{
+          event.preventDefault();
+          event.stopImmediatePropagation();
+          window.open(
+            currentNotebookUrl() || defaultUrl,
+            "_blank",
+            "noopener,noreferrer"
+          );
+        }}, true);
+        continue;
+      }}
+
       if (!label.includes("start compute environment") && !label.includes("launch kernel")) continue;
       foundLaunchButton = true;
       if (button.dataset.cpdJupyterhubBootstrap === "1") continue;
