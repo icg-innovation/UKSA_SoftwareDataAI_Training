@@ -1,8 +1,8 @@
 version: 1
 
 project:
-  title: UKSA Software, Data and AI Training
-  description: Course materials for the UK Space Agency Software, Data and AI CPD programme.
+  title: CPD Training
+  description: Practical software, data and AI training on the CPD cluster.
   github: xangma/UKSA_SoftwareDataAI_Training
   jupyter:
     server:
@@ -108,11 +108,11 @@ project:
           file: UKSA_SoftwareDataAI_Training/Phase2_Materials/cohort2/Navigating_the_notebooks.ipynb
 
 site:
-  template: book-theme
+  template: https://github.com/myst-templates/book-theme/archive/23f2df5493e23dfb1d9433c8aa64c87beb4232a3.zip
   actions:
     - title: JupyterHub
       url: /jupyterhub/services/uksa-thebe/bootstrap
   options:
-    logo: docs/source/Logos_Banner.png
+    logo: cpd-training.svg
     favicon: favicon.svg
     style: myst-theme.css
