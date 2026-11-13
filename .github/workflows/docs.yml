@@ -46,7 +46,9 @@ jobs:
         run: npm run check:docs
 
       - name: Build static book
-        run: npm run build:docs
+        run: |
+          npm run build:docs
+          python scripts/check_jupyterhub_launch_links.py
 
   container:
     runs-on: ubuntu-latest
@@ -113,6 +115,12 @@ jobs:
             docker logs "$CONTAINER"
             exit 1
           fi
+
+          curl --fail --silent http://localhost:8080/jupyterbook/ \
+            --output "$RUNNER_TEMP/training-landing.html"
+          python scripts/check_jupyterhub_launch_links.py "$RUNNER_TEMP/training-landing.html"
+          curl --fail --silent --head http://localhost:8080/jupyterbook/ \
+            | grep -qi '^Cache-Control: no-cache'
 
           REDIRECT=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:8080/uksa-training/)
           if [ "$REDIRECT" != "301" ]; then
